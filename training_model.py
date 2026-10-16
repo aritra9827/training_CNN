@@ -29,9 +29,130 @@ sys.path.append(module_dir)
 
 
 #%%
-'''loss function define'''
+'''loss functions define'''
 
 
+
+def loss_fro_norm_0_1(y_true,y_pred):
+
+    '''
+    parameters:
+    -----------
+
+    ytrue/ypred : numpy ndarray
+
+
+
+    returns:
+    ---------
+
+    loss    :   real number float
+
+        calculates the frobenius norm of the density matrix computed from the coefficient vectors y_true and y_pred
+
+
+    '''
+
+    SSize = int(tf.shape(y_true)[1])
+#    print('size', SSize, 'print datatype ', type(SSize), 'shape',np.shape(y_true))
+
+    ssize_comp = int(SSize/2)
+
+
+
+    y_pred = tf.math.l2_normalize(y_pred, axis = -1)
+    y_true = tf.math.l2_normalize(y_true, axis = -1)
+
+
+
+    y_true_comp = tf.complex(tf.slice(y_true,begin=[0,0],size=[1,ssize_comp]),
+               tf.slice(y_true,begin=[0,ssize_comp],size=[1,ssize_comp]))
+
+
+    y_pred_comp = tf.complex(tf.slice(y_pred,begin=[0,0],size=[1,ssize_comp]),
+               tf.slice(y_pred,begin=[0,ssize_comp],size=[1,ssize_comp]))
+
+
+    y_true_comp = tf.transpose(y_true_comp); y_pred_comp= tf.transpose(y_pred_comp)
+
+
+
+
+    rho_true = tf.matmul(y_true_comp,tf.linalg.adjoint(y_true_comp))
+    rho_pred = tf.matmul(y_pred_comp,tf.linalg.adjoint(y_pred_comp))
+
+    rho_pred = tf.cast(rho_pred,tf.complex128)
+    rho_true = tf.cast(rho_true,tf.complex128)
+
+
+    loss = tf.linalg.norm(rho_true - rho_pred)
+
+    loss_norm = tf.cast(loss,dtype=tf.float32)/tf.cast(tf.sqrt(tf.constant(2.0)),dtype=tf.float32)
+
+
+    return loss_norm
+
+
+
+def loss_fro_norm_v2(y_true, y_pred):
+
+
+
+    n = tf.shape(y_true)[-1] // 2
+
+    # Normalize each sample separately
+    y_true = tf.math.l2_normalize(y_true, axis=-1)
+    y_pred = tf.math.l2_normalize(y_pred, axis=-1)
+
+    # Construct complex coefficient vectors
+    # Shape: (batch_size, N)
+    y_true_comp = tf.complex(
+        y_true[:, :n],
+        y_true[:, n:]
+    )
+
+    y_pred_comp = tf.complex(
+        y_pred[:, :n],
+        y_pred[:, n:]
+    )
+
+    # Convert to column vectors
+    # Shape: (batch_size, N, 1)
+    y_true_comp = tf.expand_dims(y_true_comp, axis=-1)
+    y_pred_comp = tf.expand_dims(y_pred_comp, axis=-1)
+
+    # Density matrices:
+    # rho = |psi><psi|
+    # Shape: (batch_size, N, N)
+    rho_true = tf.matmul(
+        y_true_comp,
+        tf.linalg.adjoint(y_true_comp)
+    )
+
+    rho_pred = tf.matmul(
+        y_pred_comp,
+        tf.linalg.adjoint(y_pred_comp)
+    )
+
+    # Difference between density matrices
+    rho_diff = rho_true - rho_pred
+
+    # Frobenius norm for EACH sample:
+    # ||A||_F = sqrt(sum_mn |A_mn|^2)
+    loss_per_sample = tf.sqrt(
+        tf.reduce_sum(
+            tf.abs(rho_diff)**2,
+            axis=[1, 2]
+        )
+    )
+
+    # Normalize to [0,1]
+    loss_per_sample = loss_per_sample / tf.sqrt(2.0)
+
+    # Mean over the batch
+    loss = tf.reduce_mean(loss_per_sample)
+
+    return loss
 
 
 
